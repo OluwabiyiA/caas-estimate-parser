@@ -1,6 +1,6 @@
 FROM python:3.7.7-slim
 
-ENV PORT 3005
+ENV PORT 5000
 
 WORKDIR /usr/src/app
 
@@ -10,4 +10,4 @@ RUN pip install --no-cache-dir -r ./requirements.txt
 
 EXPOSE $PORT
 
-CMD [ "npm", "run", "prod" ]
+CMD ["./rest-server.py" ]
