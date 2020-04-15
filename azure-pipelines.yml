@@ -1,0 +1,107 @@
+# Build Docker image for this app using Azure Pipelines
+# https://docs.microsoft.com/azure/devops/pipelines/languages/docker?view=vsts
+pool:
+  vmImage: 'Ubuntu 16.04'
+
+variables:
+  - group: Build-Varaible
+  - name: imageName
+    value: 'caas-estimate-parser:$(Build.BuildId)'
+  - name: acrRepoName
+    value: 'ellisdonacrnonprod'
+  - name: acrRepoNameMaster
+    value: 'ellisdonacrmaster'
+  - name: whitesourceproject
+    value: 'caas-estimate-parser'
+  - name: whitesourcereport
+    value: 'https://saas.whitesourcesoftware.com/Wss/WSS.html#!project;id=976973'
+
+trigger:
+  branches:
+    include:
+     - develop
+     - master
+pr:
+  branches:
+    include:
+     - develop
+     - master 
+
+steps:
+- script: |
+    docker build -t $(imageName)-pr .
+  displayName: 'docker build - Pull Request'
+  condition: and(succeeded(), eq(variables['Build.Reason'], 'PullRequest'))
+  continueOnError: false
+
+- script: |
+    docker build -t $(acrRepoName).azurecr.io/$(imageName) .
+  displayName: 'docker build - develop'
+  condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/develop'))
+  continueOnError: false   
+
+- script: |
+    docker build -t $(acrRepoNameMaster).azurecr.io/$(imageName) .
+  displayName: 'docker build - master' 
+  condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/master'))
+  continueOnError: false 
+
+- script: |
+    curl -LJO https://s3.amazonaws.com/unified-agent/wss-unified-agent-19.1.1.jar
+    docker images
+  displayName: 'WhiteSource - Run Curl Jar'
+
+- script: |
+    java -jar wss-unified-agent-19.1.1.jar -c wss-unified-agent.config -apiKey $(whitesourceapi) -product $(whitesourceproduct) -project $(whitesourceproject) -scancomment $(Build.BuildNumber) 
+  displayName: 'WhiteSource - Run Java'
+
+- script: |
+    docker tag $(acrRepoName).azurecr.io/$(imageName) gcr.io/$(project-ID)/$(imageName)
+    docker login -u _json_key -p "$GCP_ACCOUNT_JSON_2" https://gcr.io
+    docker push gcr.io/$(project-ID)/$(imageName)
+  condition: and(succeeded(), ne(variables['Build.Reason'], 'PullRequest'), eq(variables['Build.SourceBranch'], 'refs/heads/develop'))
+  displayName: 'conditonal docker push & retag image to GCR - develop' 
+  continueOnError: false   
+  env:
+    pswd: $(dockerPassword)
+    GCP_ACCOUNT_JSON_2: $(GCP_ACCOUNT_JSON) 
+
+- script: |
+    docker login -u $(acrRepoNameMaster) -p $pswdMaster $(acrRepoNameMaster).azurecr.io
+    docker push $(acrRepoNameMaster).azurecr.io/$(imageName)
+  condition: and(succeeded(), ne(variables['Build.Reason'], 'PullRequest'), eq(variables['Build.SourceBranch'], 'refs/heads/master'))
+  displayName: 'conditonal docker push image to ACR - master' 
+  continueOnError: false   
+  env:
+    pswdMaster: $(dockerPasswordMaster)
+- script: |
+    docker tag $(acrRepoNameMaster).azurecr.io/$(imageName) gcr.io/$(project-ID-prod)/$(imageName)
+    docker login -u _json_key -p "$GCP_ACCOUNT_JSON_2" https://gcr.io
+    docker push gcr.io/$(project-ID-prod)/$(imageName)
+  condition: and(succeeded(), ne(variables['Build.Reason'], 'PullRequest'), eq(variables['Build.SourceBranch'], 'refs/heads/master'))
+  displayName: 'conditonal docker push & retag image to GCR - master' 
+  continueOnError: false   
+  env:
+    pswd: $(dockerPassword)
+    GCP_ACCOUNT_JSON_2: $(GCP_ACCOUNT_JSON)
+- task: HelmInstaller@0
+  condition: and(succeeded(), ne(variables['Build.Reason'], 'PullRequest'), or(eq(variables['Build.SourceBranch'], 'refs/heads/develop'), eq(variables['Build.SourceBranch'], 'refs/heads/master')))
+  inputs:
+   helmVersion: '2.10.0'
+   checkLatestHelmVersion: false
+   installKubectl: true 
+   kubectlVersion: '1.8.9'
+   checkLatestKubectl: false
+
+- script: |
+    helm package --destination $(Build.ArtifactStagingDirectory) $(Build.SourcesDirectory)/charts/caas-estimate-parser 
+  displayName: 'Create Helm Package'
+  condition: and(succeeded(), ne(variables['Build.Reason'], 'PullRequest'), or(eq(variables['Build.SourceBranch'], 'refs/heads/develop'), eq(variables['Build.SourceBranch'], 'refs/heads/master')))
+
+- task: PublishBuildArtifacts@1
+  condition: and(succeeded(), ne(variables['Build.Reason'], 'PullRequest'), or(eq(variables['Build.SourceBranch'], 'refs/heads/develop'), eq(variables['Build.SourceBranch'], 'refs/heads/master')))
+  displayName: 'Publish Artifacts'
+  inputs:
+    pathtoPublish: '$(Build.ArtifactStagingDirectory)'
+    artifactName: 'drop' 
+    publishLocation: 'container'     
