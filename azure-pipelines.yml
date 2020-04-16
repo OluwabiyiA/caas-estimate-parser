@@ -46,14 +46,14 @@ steps:
   condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/master'))
   continueOnError: false 
 
-- script: |
-    curl -LJO https://s3.amazonaws.com/unified-agent/wss-unified-agent-19.1.1.jar
-    docker images
-  displayName: 'WhiteSource - Run Curl Jar'
+# - script: |
+#     curl -LJO https://s3.amazonaws.com/unified-agent/wss-unified-agent-19.1.1.jar
+#     docker images
+#   displayName: 'WhiteSource - Run Curl Jar'
 
-- script: |
-    java -jar wss-unified-agent-19.1.1.jar -c wss-unified-agent.config -apiKey $(whitesourceapi) -product $(whitesourceproduct) -project $(whitesourceproject) -scancomment $(Build.BuildNumber) 
-  displayName: 'WhiteSource - Run Java'
+# - script: |
+#     java -jar wss-unified-agent-19.1.1.jar -c wss-unified-agent.config -apiKey $(whitesourceapi) -product $(whitesourceproduct) -project $(whitesourceproject) -scancomment $(Build.BuildNumber) 
+#   displayName: 'WhiteSource - Run Java'
 
 - script: |
     docker tag $(acrRepoName).azurecr.io/$(imageName) gcr.io/$(project-ID)/$(imageName)
