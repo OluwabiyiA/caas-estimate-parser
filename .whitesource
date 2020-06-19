@@ -1,0 +1,11 @@
+{
+  "scanSettings": {
+    "configMode": "AUTO"
+  },
+  "checkRunSettings": {
+    "vulnerableCheckRunConclusionLevel": "success"
+  },
+  "issueSettings": {
+    "minSeverityLevel": "NONE"
+  }
+}
